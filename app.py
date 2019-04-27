@@ -73,7 +73,6 @@ def methodical_error(a, b, nodes, degree):
 
 def newton_cotes(a, b, n, value=True):
     nc_nodes = np.linspace(a, b, n)
-    print(nc_nodes)
     # print('nodes', nc_nodes)
     nc_moments = moments(n, a, b)
     # print('moments', nc_moments)
@@ -83,7 +82,6 @@ def newton_cotes(a, b, n, value=True):
     # print(quadrature_formula_coeffs)
     my_solve_ = my_solve(quadrature_formula_coeffs, nc_nodes)
     if value:
-        print(my_solve_)
         return my_solve_
     # print('my_solve =', my_solve_)
     # print('true_solve =', integrate.quad(source_f, a, b)[0])
@@ -128,29 +126,27 @@ def gauss(a, b, n):
 # print(gauss_)
 
 
-def s_h_values(a, b, n, k, method=newton_cotes):
+def s_h_sum(a, b, n, k, method=newton_cotes):
     s_h = 0
     h = (b - a) / k
-    print(k, h)
     for i in range(k):
-        print(i)
         s_h += method(a + i * h, a + (i + 1) * h, n, value=True)
     return s_h
 
 
-my = s_h_values(A, B, N, 423, method=newton_cotes)
-print('my', my)
-print('true_solve =', integrate.quad(source_f, A, B)[0])
+# s_h_sum = s_h_sum(A, B, N, 32)
+# true = integrate.quad(source_f, A, B, epsabs=1e-10)[0]
 
 
 def runge(a, b, n, k=2, epsilon=10**-6, method=newton_cotes, accuracy=True):
     l_ = 2
     m = n - 1
     h = (b - a) / k
-    s_h1, s_h2 = s_h_values(a, b, n, k, method=method), s_h_values(a, b, n, k * l_, method=method)
+    s_h1, s_h2 = s_h_sum(a, b, n, k, method=method), s_h_sum(a, b, n, k * l_, method=method)
     if accuracy:
         error = abs((s_h1 - s_h2) / (1 - l_ ** (-m)))
-        return error
+        true_error = abs(integrate.quad(source_f, a, b, epsabs=1e-10)[0] - s_h1)
+        return true_error, error
     h_opt = 0.95 * h * ((epsilon * (1 - l_ ** (-m))/abs(s_h1 - s_h2)) ** (1 / m))
     print(s_h1 - s_h2)
     k_opt = math.ceil((b - a) / h_opt)
@@ -158,4 +154,40 @@ def runge(a, b, n, k=2, epsilon=10**-6, method=newton_cotes, accuracy=True):
     return h_opt, k_opt
 
 
-# print(runge(A, B, N, accuracy=False))
+print('errors', runge(A, B, N))
+
+
+def richardson(a, b, n, r=2, epsilon=10**-6, method=newton_cotes, accuracy=True):
+    l_ = 2
+    m = n - 1
+    h = (b - a) / r
+    error = epsilon + 1
+    if accuracy:
+        h_matrix = np.ones((r + 1, r + 1)) * (-1)
+        s_h_vector = []
+        for i in range(r + 1):
+            for j in range(r):
+                h_matrix[i][j] = (h / l_**i) ** (m + j)
+            s_h_vector.append(-s_h_sum(a, b, n, r * l_ ** i, method=method))
+        c_m = np.linalg.solve(h_matrix, s_h_vector)
+        print(h_matrix, s_h_vector)
+        print(c_m)
+        error = abs(c_m[-1] + s_h_vector[0])
+        return error
+    r = 1
+    s_h_vector = [- s_h_sum(a, b, n, r * l_ ** 0, method=method), - s_h_sum(a, b, n, r * l_ ** r, method=method)]
+    while error > epsilon:
+        r += 1
+        h_matrix = np.ones((r + 1, r + 1))*(-1)
+        for i in range(r + 1):
+            for j in range(r):
+                h_matrix[i][j] = (h / l_ ** i) ** (m + j)
+        s_h_vector.append(-s_h_sum(a, b, n, r * l_ ** r, method=method))
+        c_m = np.linalg.solve(h_matrix, s_h_vector)
+        h_matrix[-1][-1] = 0
+        error = abs(np.dot(h_matrix[-1], c_m))
+    return c_m[-1], error
+
+
+print(richardson(A, B, N, accuracy=False))
+

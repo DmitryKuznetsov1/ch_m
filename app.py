@@ -10,6 +10,7 @@ A = 2.1
 B = 3.3
 ALPHA = 0.4
 BETA = 0
+EPS = 10**-6
 N = 3   # number of nodes
 x = symbols('x')
 source_f = lambda x: (4.5 * cos(7 * x) * exp(-2 * x / 3) + 1.4 * sin(1.5 * x) * exp(-x / 3) + 3) * weight_func(x, 0)
@@ -94,7 +95,7 @@ def newton_cotes(a, b, n, value=True):
 # print(nc)
 
 
-def gauss(a, b, n):
+def gauss(a, b, n, value=True):
     gauss_moments = moments(2 * n, a, b)
     # print('moments\n', gauss_moments)
     mu_sj = np.zeros((n, n))
@@ -115,6 +116,9 @@ def gauss(a, b, n):
     mu_s = gauss_moments[:n]
     # print('moments vector 0 to n - 1', mu_s)
     gauss_coeffs = np.linalg.solve(gauss_matrix_of_nodes, mu_s)
+    my_solve_ = my_solve(gauss_coeffs, gauss_nodes)
+    if value:
+        return my_solve_
     # print('gauss coeffs', gauss_coeffs)
     # print('gauss my solve', my_solve(gauss_coeffs, gauss_nodes))
     # print('gauss error =', abs(my_solve(gauss_coeffs, gauss_nodes) - integrate.quad(source_f, a, b)[0]))
@@ -139,26 +143,28 @@ def s_h_sum(a, b, n, k, method=newton_cotes):
 
 
 def runge(a, b, n, k=2, epsilon=10**-6, method=newton_cotes, accuracy=True):
-    l_ = 2
+    l = 2
     m = n - 1
     h = (b - a) / k
-    s_h1, s_h2 = s_h_sum(a, b, n, k, method=method), s_h_sum(a, b, n, k * l_, method=method)
+    s_h1, s_h2 = s_h_sum(a, b, n, k, method=method), s_h_sum(a, b, n, k * l, method=method)
     if accuracy:
-        error = abs((s_h1 - s_h2) / (1 - l_ ** (-m)))
-        true_error = abs(integrate.quad(source_f, a, b, epsabs=1e-10)[0] - s_h1)
-        return true_error, error
-    h_opt = 0.95 * h * ((epsilon * (1 - l_ ** (-m))/abs(s_h1 - s_h2)) ** (1 / m))
-    print(s_h1 - s_h2)
+        error = abs((s_h1 - s_h2) / (1 - l ** (-m)))
+        # true_error = abs(integrate.quad(source_f, a, b, epsabs=1e-10)[0] - s_h1)
+        return error
+    h_opt = 0.95 * h * ((epsilon * (1 - l ** (-m))/abs(s_h1 - s_h2)) ** (1 / m))
     k_opt = math.ceil((b - a) / h_opt)
     h_opt = (b - a) / k_opt
     return h_opt, k_opt
 
 
-print('errors', runge(A, B, N))
+print('runge error', runge(A, B, N))
+h_opt_, k_opt_ = runge(A, B, N, accuracy=False)
+print('runge h opt, k opt', h_opt_, k_opt_)
+print('runge error for k opt', runge(A, B, N, k=k_opt_))
 
 
 def richardson(a, b, n, r=2, epsilon=10**-6, method=newton_cotes, accuracy=True):
-    l_ = 2
+    l = 2
     m = n - 1
     h = (b - a) / r
     error = epsilon + 1
@@ -167,27 +173,58 @@ def richardson(a, b, n, r=2, epsilon=10**-6, method=newton_cotes, accuracy=True)
         s_h_vector = []
         for i in range(r + 1):
             for j in range(r):
-                h_matrix[i][j] = (h / l_**i) ** (m + j)
-            s_h_vector.append(-s_h_sum(a, b, n, r * l_ ** i, method=method))
+                h_matrix[i][j] = (h / l**i) ** (m + j)
+            s_h_vector.append(-s_h_sum(a, b, n, r * l ** i, method=method))
         c_m = np.linalg.solve(h_matrix, s_h_vector)
-        print(h_matrix, s_h_vector)
-        print(c_m)
+        # print(h_matrix, s_h_vector)
+        # print(c_m)
         error = abs(c_m[-1] + s_h_vector[0])
         return error
     r = 1
-    s_h_vector = [- s_h_sum(a, b, n, r * l_ ** 0, method=method), - s_h_sum(a, b, n, r * l_ ** r, method=method)]
+    s_h_vector = [- s_h_sum(a, b, n, r * l ** 0, method=method), - s_h_sum(a, b, n, r * l ** r, method=method)]
     while error > epsilon:
         r += 1
         h_matrix = np.ones((r + 1, r + 1))*(-1)
         for i in range(r + 1):
             for j in range(r):
-                h_matrix[i][j] = (h / l_ ** i) ** (m + j)
-        s_h_vector.append(-s_h_sum(a, b, n, r * l_ ** r, method=method))
+                h_matrix[i][j] = (h / l ** i) ** (m + j)
+        s_h_vector.append(-s_h_sum(a, b, n, r * l ** r, method=method))
         c_m = np.linalg.solve(h_matrix, s_h_vector)
         h_matrix[-1][-1] = 0
         error = abs(np.dot(h_matrix[-1], c_m))
+    print('r', r)
     return c_m[-1], error
 
 
-print(richardson(A, B, N, accuracy=False))
+print('est error for r = 6 is', richardson(A, B, N, r=6, epsilon=10**-6, method=newton_cotes, accuracy=True))
+
+
+def aitken(a, b, n, method=newton_cotes):
+    k = 3
+    l = 2
+    s_h1, s_h2, s_h3 = s_h_sum(a, b, n, k, method=method), s_h_sum(a, b, n, k * l, method=method),\
+                       s_h_sum(a, b, n, k * l ** 2, method=method)
+    m = -(np.log(abs((s_h3 - s_h2) / (s_h2 - s_h1))) / np.log(l))
+    return m
+
+
+print('m from aitken', aitken(A, B, N, method=newton_cotes))
+
+
+def comp_quadr_formula(a, b, n, epsilon=10**-6, method=newton_cotes, accuracy_rule=runge):
+    true_solve = integrate.quad(source_f, A, B, epsabs=1e-10)[0]
+    if accuracy_rule == runge:
+        h_opt, k_opt = accuracy_rule(a, b, n, epsilon=10**-6, method=method, accuracy=False)
+        est_error = accuracy_rule(a, b, n, k_opt, epsilon=10**-6, method=method, accuracy=True)
+        my_solve_ = s_h_sum(a, b, n, k_opt, method=method)
+    elif accuracy_rule == richardson:
+        my_solve_, est_error = accuracy_rule(a, b, n, epsilon=epsilon, method=method, accuracy=False)
+    print('composite solve', my_solve_)
+    print('true solve', true_solve)
+    print('estimated error', est_error)
+    print('true error', abs(true_solve - my_solve_))
+
+
+comp_quadr_formula(A, B, N, epsilon=EPS, method=newton_cotes, accuracy_rule=richardson)
+
 

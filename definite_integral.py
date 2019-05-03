@@ -5,7 +5,6 @@ from scipy import integrate, optimize
 import numpy as np
 import sympy as sp
 
-
 A = 2.1
 B = 3.3
 ALPHA = 0.4

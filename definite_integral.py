@@ -1,5 +1,5 @@
 import math
-from math import cos, sin, exp
+from math import cos, sin, exp, ceil
 from sympy import symbols
 from scipy import integrate, optimize
 import numpy as np
@@ -156,10 +156,10 @@ def runge(a, b, n, k=2, epsilon=10**-6, method=newton_cotes, accuracy=True):
     return h_opt, k_opt
 
 
-print('runge error', runge(A, B, N))
+print('Runge error for k=2:', runge(A, B, N))
 h_opt_, k_opt_ = runge(A, B, N, accuracy=False)
-print('runge h opt, k opt', h_opt_, k_opt_)
-print('runge error for k opt', runge(A, B, N, k=k_opt_))
+print('Runge h opt, k opt:', h_opt_, k_opt_)
+print('Runge error for k opt:', runge(A, B, N, k=k_opt_))
 
 
 def richardson(a, b, n, r=2, epsilon=10**-6, method=newton_cotes, accuracy=True):
@@ -178,7 +178,7 @@ def richardson(a, b, n, r=2, epsilon=10**-6, method=newton_cotes, accuracy=True)
         # print(h_matrix, s_h_vector)
         # print(c_m)
         error = abs(c_m[-1] + s_h_vector[0])
-        return error
+        return error, h
     r = 1
     s_h_vector = [- s_h_sum(a, b, n, r * l ** 0, method=method), - s_h_sum(a, b, n, r * l ** r, method=method)]
     while error > epsilon:
@@ -191,11 +191,21 @@ def richardson(a, b, n, r=2, epsilon=10**-6, method=newton_cotes, accuracy=True)
         c_m = np.linalg.solve(h_matrix, s_h_vector)
         h_matrix[-1][-1] = 0
         error = abs(np.dot(h_matrix[-1], c_m))
-    print('r', r)
-    return c_m[-1], error
+    print('r:', r)
+    return c_m[-1], error, (b-a)*r/(l**r)
 
 
-print('est error for r = 6 is', richardson(A, B, N, r=6, epsilon=10**-6, method=newton_cotes, accuracy=True))
+R_h1, h1 = richardson(A, B, N, accuracy=False)[1], richardson(A, B, N, accuracy=False)[2]
+print('Error, step:', R_h1, h1)
+h_opt_1 = h1 * (EPS/abs(R_h1))**(1 / (N - 1))
+print('h opt1:', h_opt_1)
+k_opt_1 = math.ceil((B-A)/h_opt_1)
+print('k opt1:', k_opt_1)
+print('Error with h opt1:', richardson(A, B, N, r=k_opt_1, accuracy=True)[0])
+
+
+# for i in range(6):
+#     print('Estimated error for r = 6 is', richardson(A, B, N, r=i+1, epsilon=10**-6, method=newton_cotes, accuracy=True))
 
 
 def aitken(a, b, n, method=newton_cotes):
@@ -218,12 +228,12 @@ def comp_quadr_formula(a, b, n, epsilon=10**-6, method=newton_cotes, accuracy_ru
         my_solve_ = s_h_sum(a, b, n, k_opt, method=method)
     elif accuracy_rule == richardson:
         my_solve_, est_error = accuracy_rule(a, b, n, epsilon=epsilon, method=method, accuracy=False)
-    print('composite solve', my_solve_)
-    print('true solve', true_solve)
-    print('estimated error', est_error)
-    print('true error', abs(true_solve - my_solve_))
+    print('Composite solve', my_solve_)
+    print('True solve', true_solve)
+    print('Estimated error', est_error)
+    print('True error', abs(true_solve - my_solve_))
 
 
-comp_quadr_formula(A, B, N, epsilon=EPS, method=newton_cotes, accuracy_rule=richardson)
+comp_quadr_formula(A, B, N, epsilon=EPS, method=newton_cotes, accuracy_rule=runge)
 
 
